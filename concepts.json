@@ -1,0 +1,120 @@
+[
+  {
+    "week": "2026-W22",
+    "weekLabel": "5월 4주차 (5/25~5/31)",
+    "concepts": [
+      {
+        "term": "스키마 (Schema)",
+        "category": "데이터베이스",
+        "summary": "데이터베이스 안에서 테이블들을 묶어주는 논리적 그룹",
+        "detail": "마치 공유 드라이브에서 '물류팀 폴더' 안에 재고·출고·입고 파일을 넣는 것처럼, 관련 있는 테이블들을 한 이름 아래 정리하는 방식이에요.",
+        "example": "nansoft.b2c_order_release → nansoft 스키마 안의 출고 배정 테이블",
+        "projectContext": "WMS 데이터 → nansoft 스키마, ERP 데이터 → erp 스키마 (예정)"
+      },
+      {
+        "term": "테이블 (Table)",
+        "category": "데이터베이스",
+        "summary": "스키마 안에 있는 실제 데이터 저장 공간 (엑셀 시트 1장)",
+        "detail": "행(row) = 데이터 한 건, 열(column) = 항목 종류. 엑셀 시트 한 장과 동일한 개념이에요.",
+        "example": "b2c_order_release 테이블 = 'B2C출고내역' 엑셀 시트 한 장",
+        "projectContext": "현재 3개 테이블 운영: b2c_order_release, b2c_order_tnum, b2c_order_details"
+      },
+      {
+        "term": "컬럼 (Column)",
+        "category": "데이터베이스",
+        "summary": "테이블에서 데이터의 종류(항목명)를 정의하는 세로 열",
+        "detail": "컬럼에는 이름과 함께 데이터 타입(숫자, 텍스트, 날짜 등)도 지정해요. 엑셀의 열 머리글(A열, B열)과 같아요.",
+        "example": "order_id(TEXT), release_date(DATE), quantity(INTEGER)",
+        "projectContext": "release_date = 전산차감일, wms_date = 배정일, order_date = 주문일"
+      },
+      {
+        "term": "파라미터 (Parameter)",
+        "category": "API",
+        "summary": "API에 '어떤 데이터를 달라'고 조건을 지정하는 값",
+        "detail": "쿠팡에서 '카테고리=생활용품, 가격=1만원 이하'로 필터링하듯, API에도 원하는 데이터의 조건을 넘겨요.",
+        "example": "warehouseCode='B2C-WH', startDate='2024-01-01'",
+        "projectContext": "EMP API 호출 시 창고코드, 시작일, 종료일 등을 파라미터로 전달"
+      },
+      {
+        "term": "엔드포인트 (Endpoint)",
+        "category": "API",
+        "summary": "API 서버에서 특정 기능을 담당하는 URL 주소",
+        "detail": "같은 API 서버라도 기능마다 다른 엔드포인트를 가져요. 마치 같은 건물이라도 1층 민원실, 2층 회계과처럼 용도가 달라요.",
+        "example": "/GetOrderRelease (출고배정), /GetTnumInformation (운송장)",
+        "projectContext": "Nansoft EMP API의 각 엔드포인트별로 별도 테이블을 구성"
+      },
+      {
+        "term": "JSON (제이슨)",
+        "category": "API",
+        "summary": "데이터를 구조화된 텍스트로 표현하는 형식",
+        "detail": "중괄호 {}와 대괄호 []로 계층 구조를 표현해요. API가 데이터를 주고받을 때 가장 많이 사용하는 형식이에요.",
+        "example": "{\"orderId\": \"ORD-001\", \"quantity\": 3}",
+        "projectContext": "EMP API 응답이 JSON으로 오면, 파이썬 코드가 이를 파싱해서 Supabase에 저장"
+      },
+      {
+        "term": "연결 문자열 / URI",
+        "category": "연결·인증",
+        "summary": "데이터베이스 접속에 필요한 모든 정보를 한 줄로 합친 문자열",
+        "detail": "접속 방식, 사용자명, 비밀번호, 서버 주소, DB 이름이 한 줄에 포함돼요. 건물 주소 + 출입카드 + 몇 층인지를 합쳐놓은 것과 같아요.",
+        "example": "postgresql://postgres:비밀번호@db.xxxx.supabase.co:5432/postgres",
+        "projectContext": "Supabase 접속 시 이 URI를 사용하여 데이터를 읽고 쓰기"
+      },
+      {
+        "term": "API 키 (API Key)",
+        "category": "연결·인증",
+        "summary": "API 호출 시 '허가된 사용자'임을 증명하는 고유 코드",
+        "detail": "놀이공원 연간 회원권 번호처럼, API를 호출할 때마다 함께 보내서 인증해요.",
+        "example": "요청 헤더에 Authorization: Bearer sk-xxxxxxx 형태로 전달",
+        "projectContext": "EMP API 키, Supabase API 키 — 모두 GitHub Secrets로 안전하게 관리"
+      },
+      {
+        "term": "환경 변수 (Environment Variable)",
+        "category": "연결·인증",
+        "summary": "비밀번호·API 키처럼 코드에 직접 적으면 안 되는 값을 외부에 보관하는 방법",
+        "detail": "코드가 공개되어도 비밀번호가 노출되지 않도록, 실행 환경에 별도 저장해요.",
+        "example": "os.environ['SUPABASE_PASSWORD'] → GitHub Secrets에 저장된 실제 값을 불러옴",
+        "projectContext": "GitHub Actions의 Secrets에 EMP_API_KEY, SUPABASE_URL 등을 저장"
+      },
+      {
+        "term": "GitHub Actions",
+        "category": "자동화",
+        "summary": "정해진 시간에 코드를 자동 실행해주는 스케줄러",
+        "detail": ".yml 파일에 '언제, 어떤 코드를, 어떻게 실행할지' 정의하면, GitHub 서버가 대신 실행해줘요. 내 컴퓨터가 꺼져 있어도 자동으로 돌아가요.",
+        "example": "매일 KST 12:00, 20:00에 daily_refresh_dashboard.yml 실행",
+        "projectContext": "현재 1일 2회 실행 → 6회(4시간 간격) 확장 논의 중"
+      },
+      {
+        "term": "DELETE-INSERT",
+        "category": "자동화",
+        "summary": "해당 날짜 데이터를 통째로 지우고 새로 넣는 갱신 전략",
+        "detail": "엑셀에서 특정 날짜 행을 전부 지우고, API에서 받은 최신 데이터로 다시 붙여넣기 하는 것과 같아요. 재실행해도 중복이 생기지 않아요(멱등성 보장).",
+        "example": "1월 15일 데이터 DELETE → 1월 15일 데이터 INSERT",
+        "projectContext": "모든 테이블(release, tnum, details)에 동일 전략 적용"
+      },
+      {
+        "term": "ThreadPoolExecutor",
+        "category": "자동화",
+        "summary": "여러 API 요청을 동시에 처리하여 속도를 높이는 기법",
+        "detail": "편의점 계산대를 여러 개 열어서 동시에 처리하는 것처럼, API 요청을 병렬로 보내요.",
+        "example": "창고 5개 × 날짜 30일 = 150건 요청을 순차 대신 병렬로 처리",
+        "projectContext": "벌크 히스토리 로드 및 일일 자동화에서 활용"
+      },
+      {
+        "term": "멱등성 (Idempotent)",
+        "category": "개념",
+        "summary": "같은 작업을 여러 번 반복해도 결과가 동일한 성질",
+        "detail": "에어컨 전원이 이미 켜진 상태에서 다시 눌러도 '켜짐' 상태가 유지되는 것처럼, 코드를 실수로 두 번 실행해도 데이터가 중복되지 않아요.",
+        "example": "DELETE-INSERT 전략 = 멱등성 보장 → 재실행 안전",
+        "projectContext": "모든 데이터 파이프라인에 멱등성을 기본 원칙으로 적용"
+      },
+      {
+        "term": "타임스탬프 (Timestamp)",
+        "category": "개념",
+        "summary": "날짜와 시간을 동시에 기록하는 형식",
+        "detail": "KST(한국 시간) 기준으로, 마이크로초를 제거한 ISO 형식을 사용해요.",
+        "example": "2024-01-15T14:30:00+09:00 (날짜T시간+시간대)",
+        "projectContext": "데이터 삽입 시 .replace(microsecond=0).isoformat() 형식 사용"
+      }
+    ]
+  }
+]

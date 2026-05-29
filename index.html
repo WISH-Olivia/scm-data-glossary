@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SCM 백엔드 개념 사전</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAFAF8;
+    --bg-card: #FFFFFF;
+    --bg-surface: #F3F2EE;
+    --bg-code: #F7F6F3;
+    --text-primary: #1A1A19;
+    --text-secondary: #6B6A65;
+    --text-tertiary: #9C9B95;
+    --border: #E5E4DF;
+    --border-light: #EDECE8;
+    --accent: #2D5A3D;
+    --accent-light: #E8F0EB;
+    --accent-text: #1E3D29;
+    --cat-db: #4A55A2;
+    --cat-db-bg: #EEEDFA;
+    --cat-api: #C05621;
+    --cat-api-bg: #FEF0E6;
+    --cat-auth: #0E7C6B;
+    --cat-auth-bg: #E5F5F2;
+    --cat-auto: #9B2C2C;
+    --cat-auto-bg: #FDE8E8;
+    --cat-concept: #7C6E2A;
+    --cat-concept-bg: #FCF7E6;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+    --shadow-hover: 0 4px 12px rgba(0,0,0,0.06), 0 2px 4px rgba(0,0,0,0.03);
+    --font-body: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+    --transition: 0.2s ease;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161615;
+      --bg-card: #1E1E1C;
+      --bg-surface: #252523;
+      --bg-code: #2A2A27;
+      --text-primary: #E8E7E3;
+      --text-secondary: #9C9B95;
+      --text-tertiary: #6B6A65;
+      --border: #333330;
+      --border-light: #2A2A27;
+      --accent: #6EBF8B;
+      --accent-light: #1E2E24;
+      --accent-text: #A3D9B5;
+      --cat-db: #A3ADEB;
+      --cat-db-bg: #252840;
+      --cat-api: #F0A476;
+      --cat-api-bg: #3A2518;
+      --cat-auth: #5CC8B5;
+      --cat-auth-bg: #14302B;
+      --cat-auto: #F09090;
+      --cat-auto-bg: #3A1818;
+      --cat-concept: #D4C87A;
+      --cat-concept-bg: #302C14;
+      --shadow-card: 0 1px 3px rgba(0,0,0,0.2);
+      --shadow-hover: 0 4px 12px rgba(0,0,0,0.3);
+    }
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Header */
+  .header {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-light);
+    padding: 2.5rem 0 2rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-inner {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  .header-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .site-title {
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+  }
+
+  .site-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+    font-weight: 300;
+  }
+
+  .update-badge {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--accent);
+    background: var(--accent-light);
+    padding: 4px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+
+  /* Search */
+  .search-wrap {
+    position: relative;
+  }
+
+  .search-wrap svg {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-tertiary);
+    width: 16px;
+    height: 16px;
+    pointer-events: none;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 10px 14px 10px 40px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-surface);
+    font-size: 0.85rem;
+    font-family: var(--font-body);
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color var(--transition), box-shadow var(--transition);
+  }
+
+  .search-input::placeholder { color: var(--text-tertiary); }
+  .search-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(45,90,61,0.08);
+  }
+
+  /* Filters */
+  .filter-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+  }
+
+  .filter-btn {
+    font-size: 0.72rem;
+    font-weight: 500;
+    font-family: var(--font-body);
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+
+  .filter-btn:hover { border-color: var(--text-tertiary); }
+  .filter-btn.active {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent-text);
+  }
+
+  /* Main */
+  .main {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+
+  /* Week Section */
+  .week-section {
+    margin-bottom: 2.5rem;
+  }
+
+  .week-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .week-code {
+    font-size: 0.72rem;
+    font-weight: 500;
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+    background: var(--bg-surface);
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+  }
+
+  .week-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .week-count {
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    margin-left: auto;
+  }
+
+  /* Concept Card */
+  .concept-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    margin-bottom: 8px;
+    box-shadow: var(--shadow-card);
+    transition: box-shadow var(--transition), border-color var(--transition);
+    overflow: hidden;
+  }
+
+  .concept-card:hover {
+    box-shadow: var(--shadow-hover);
+    border-color: var(--border);
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .card-header:hover .expand-icon { color: var(--text-secondary); }
+
+  .cat-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .cat-데이터베이스 { background: var(--cat-db-bg); color: var(--cat-db); }
+  .cat-API { background: var(--cat-api-bg); color: var(--cat-api); }
+  .cat-연결·인증, .cat-연결인증 { background: var(--cat-auth-bg); color: var(--cat-auth); }
+  .cat-자동화 { background: var(--cat-auto-bg); color: var(--cat-auto); }
+  .cat-개념 { background: var(--cat-concept-bg); color: var(--cat-concept); }
+
+  .card-term {
+    font-size: 0.9rem;
+    font-weight: 500;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .card-summary {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    display: none;
+  }
+
+  @media (min-width: 600px) {
+    .card-summary { display: block; }
+  }
+
+  .expand-icon {
+    color: var(--text-tertiary);
+    transition: transform 0.25s ease, color var(--transition);
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+  }
+
+  .concept-card.open .expand-icon { transform: rotate(180deg); }
+
+  /* Card Body */
+  .card-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+
+  .card-body-inner {
+    padding: 0 18px 16px;
+  }
+
+  .detail-text {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.75;
+    margin-bottom: 12px;
+  }
+
+  .info-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  @media (min-width: 500px) {
+    .info-row { grid-template-columns: 1fr 1fr; }
+  }
+
+  .info-box {
+    background: var(--bg-surface);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+  }
+
+  .info-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+
+  .info-value {
+    font-size: 0.78rem;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    line-height: 1.5;
+    word-break: break-all;
+  }
+
+  .info-value.prose {
+    font-family: var(--font-body);
+    word-break: keep-all;
+  }
+
+  /* Stats Bar */
+  .stats-bar {
+    display: flex;
+    gap: 1.5rem;
+    padding: 1rem 0 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .stat-item {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .stat-number {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--accent-text);
+  }
+
+  .stat-label {
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+  }
+
+  /* No Results */
+  .no-results {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    padding: 2rem 1rem 3rem;
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+    border-top: 1px solid var(--border-light);
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  /* Scroll to top */
+  .scroll-top {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+
+  .scroll-top.visible { opacity: 1; pointer-events: auto; }
+  .scroll-top:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div class="header-top">
+      <div>
+        <div class="site-title">SCM 백엔드 개념 사전</div>
+        <div class="site-subtitle">WISH SCM팀 · 데이터 인프라 프로젝트 용어 정리</div>
+      </div>
+      <div class="update-badge" id="updateBadge"></div>
+    </div>
+    <div class="search-wrap">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
+      <input type="text" class="search-input" id="searchInput" placeholder="개념명 또는 키워드 검색…">
+    </div>
+    <div class="filter-row" id="filterRow"></div>
+  </div>
+</div>
+
+<div class="main" id="main">
+  <div class="stats-bar" id="statsBar"></div>
+  <div id="content"></div>
+</div>
+
+<div class="footer">
+  SCM팀 데이터 인프라 프로젝트 · 매주 업데이트 · 문의: Olivia
+</div>
+
+<button class="scroll-top" id="scrollTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+</button>
+
+<script>
+let allData = [];
+let activeFilter = '전체';
+
+async function init() {
+  try {
+    const res = await fetch('./concepts.json');
+    allData = await res.json();
+  } catch (e) {
+    document.getElementById('content').innerHTML =
+      '<div class="no-results">concepts.json 파일을 불러올 수 없습니다.</div>';
+    return;
+  }
+
+  buildFilters();
+  render();
+
+  document.getElementById('searchInput').addEventListener('input', render);
+
+  window.addEventListener('scroll', () => {
+    const btn = document.getElementById('scrollTop');
+    btn.classList.toggle('visible', window.scrollY > 400);
+  });
+}
+
+function buildFilters() {
+  const cats = new Set();
+  allData.forEach(w => w.concepts.forEach(c => cats.add(c.category)));
+  const row = document.getElementById('filterRow');
+  const allBtn = createFilterBtn('전체', true);
+  row.appendChild(allBtn);
+  [...cats].sort().forEach(cat => row.appendChild(createFilterBtn(cat, false)));
+}
+
+function createFilterBtn(label, active) {
+  const btn = document.createElement('button');
+  btn.className = 'filter-btn' + (active ? ' active' : '');
+  btn.textContent = label;
+  btn.onclick = () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = label;
+    render();
+  };
+  return btn;
+}
+
+function render() {
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  const container = document.getElementById('content');
+  container.innerHTML = '';
+
+  let totalConcepts = 0;
+  let totalWeeks = 0;
+  let latestWeek = '';
+
+  allData.forEach(week => {
+    const filtered = week.concepts.filter(c => {
+      const matchCat = activeFilter === '전체' || c.category === activeFilter;
+      const matchSearch = !q ||
+        c.term.toLowerCase().includes(q) ||
+        c.summary.toLowerCase().includes(q) ||
+        c.detail.toLowerCase().includes(q) ||
+        c.category.toLowerCase().includes(q) ||
+        (c.example && c.example.toLowerCase().includes(q)) ||
+        (c.projectContext && c.projectContext.toLowerCase().includes(q));
+      return matchCat && matchSearch;
+    });
+
+    if (filtered.length === 0) return;
+
+    totalWeeks++;
+    totalConcepts += filtered.length;
+    if (!latestWeek) latestWeek = week.weekLabel;
+
+    const section = document.createElement('div');
+    section.className = 'week-section';
+    section.innerHTML = `
+      <div class="week-header">
+        <span class="week-code">${week.week}</span>
+        <span class="week-label">${week.weekLabel}</span>
+        <span class="week-count">${filtered.length}개 개념</span>
+      </div>
+    `;
+
+    filtered.forEach(c => {
+      const card = document.createElement('div');
+      card.className = 'concept-card';
+
+      const catClass = 'cat-' + c.category.replace(/[·]/g, '');
+      card.innerHTML = `
+        <div class="card-header" onclick="toggleCard(this)">
+          <span class="cat-badge ${catClass}">${c.category}</span>
+          <span class="card-term">${highlight(c.term, q)}</span>
+          <span class="card-summary">— ${highlight(c.summary, q)}</span>
+          <svg class="expand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="card-body">
+          <div class="card-body-inner">
+            <div class="detail-text">${highlight(c.detail, q)}</div>
+            <div class="info-row">
+              <div class="info-box">
+                <div class="info-label">사용 예시</div>
+                <div class="info-value">${highlight(c.example || '-', q)}</div>
+              </div>
+              <div class="info-box">
+                <div class="info-label">프로젝트 적용</div>
+                <div class="info-value prose">${highlight(c.projectContext || '-', q)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      section.appendChild(card);
+    });
+
+    container.appendChild(section);
+  });
+
+  if (totalConcepts === 0) {
+    container.innerHTML = '<div class="no-results">검색 결과가 없습니다.</div>';
+  }
+
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat-item">
+      <span class="stat-number">${totalConcepts}</span>
+      <span class="stat-label">개념</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-number">${totalWeeks}</span>
+      <span class="stat-label">주차</span>
+    </div>
+  `;
+
+  document.getElementById('updateBadge').textContent = latestWeek
+    ? '최신: ' + latestWeek
+    : '';
+}
+
+function highlight(text, q) {
+  if (!q) return text;
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(`(${escaped})`, 'gi'),
+    '<mark style="background:var(--accent-light);color:var(--accent-text);padding:1px 3px;border-radius:3px;">$1</mark>');
+}
+
+function toggleCard(header) {
+  const card = header.parentElement;
+  const body = card.querySelector('.card-body');
+  const isOpen = card.classList.contains('open');
+
+  if (isOpen) {
+    body.style.maxHeight = '0';
+    card.classList.remove('open');
+  } else {
+    body.style.maxHeight = body.scrollHeight + 'px';
+    card.classList.add('open');
+  }
+}
+
+init();
+</script>
+
+</body>
+</html>
