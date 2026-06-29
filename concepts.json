@@ -1,5 +1,485 @@
 [
   {
+    "week": "2026-W26",
+    "weekLabel": "6월 4주차 (6/22~6/28) — 누락분 보강",
+    "concepts": [
+      {
+        "term": "RLS (Row Level Security, 행 수준 보안)",
+        "category": "연결·인증",
+        "summary": "테이블의 각 행에 누가 접근할 수 있는지 제어하는 보안 기능",
+        "detail": "테이블 전체가 아니라 행 단위로 '이 사람은 이 행을 볼 수 있다/없다'를 제어해요. Supabase는 보안을 위해 모든 테이블에 RLS를 켜도록 권장하고, 안 켜면 경고를 띄워요. 우리 프로젝트는 RLS를 켜되 정책은 열어두고(누구나 통과), 실질적 차단은 스키마 GRANT로 해요 — 2겹 방어 구조예요.",
+        "example": "ALTER TABLE manual.warehouse_operation_cost ENABLE ROW LEVEL SECURITY;",
+        "projectContext": "모든 테이블에 RLS 활성화. Supabase 보안 경고 해소 + 향후 세밀 제어의 발판"
+      },
+      {
+        "term": "정책 (Policy)",
+        "category": "연결·인증",
+        "summary": "RLS가 켜진 테이블에서 '어떤 조건이면 접근 허용'을 정하는 규칙",
+        "detail": "RLS만 켜면 아무도 접근 못 해요. 누가 통과할지는 정책(Policy)으로 정해요. USING은 조회/삭제 조건, WITH CHECK는 삽입/수정 조건이에요. 우리는 모든 테이블에 동일한 service_role_full_access 정책(qual=true, with_check=true)을 써서 '항상 통과'로 통일했어요. 글자까지 동일하게 맞추는 게 일관성의 핵심이에요.",
+        "example": "CREATE POLICY service_role_full_access ON ... FOR ALL TO public USING (true) WITH CHECK (true);",
+        "projectContext": "nansoft/erp/poomgo/manual 모든 스키마에 동일 패턴 적용 (CODING_GUIDELINES DB-004)"
+      },
+      {
+        "term": "2겹 방어 (스키마 GRANT + RLS)",
+        "category": "연결·인증",
+        "summary": "커스텀 스키마 권한과 RLS를 함께 써서 보안을 이중으로 거는 구조",
+        "detail": "우리 프로젝트 보안의 핵심 원리예요. 1차 방어는 커스텀 스키마(nansoft 등)에 명시적으로 노출·GRANT한 대상만 접근 가능하게 하는 것. 2차 방어는 RLS를 켜두는 것. 실질적 차단은 1차(스키마 GRANT)가 담당하고, RLS는 '켜져 있다'는 상태로 경고를 없애고 향후 제어의 발판 역할을 해요.",
+        "example": "1차: anon이 스키마 USAGE 권한 없으면 차단 / 2차: RLS 켜짐(정책은 열림)",
+        "projectContext": "public 스키마 노출 사고(issue_ledger) 이후 정착된 표준. 커스텀 스키마 + GRANT가 진짜 방어선"
+      },
+      {
+        "term": "Soft Delete (소프트 삭제)",
+        "category": "데이터 설계",
+        "summary": "데이터를 실제로 지우지 않고 '삭제됨' 표시만 남기는 방식",
+        "detail": "물리적으로 행을 DELETE하면 복구가 불가능해요. Soft delete는 deleted_at(삭제 시각), deleted_by(삭제자) 컬럼에 값을 채워서 '삭제된 것으로 표시'만 하고 데이터는 남겨둬요. 실수로 지워도 복구 가능하고, '누가 언제 지웠나' 추적도 돼요. 사용자가 직접 다루는 앱 데이터에 특히 중요해요.",
+        "example": "삭제 시: UPDATE tickets SET deleted_at=now(), deleted_by='olivia' WHERE id=5; (행은 그대로 보존)",
+        "projectContext": "SCM 개발 트래커 등 앱 데이터는 물리 삭제 금지, soft delete만 허용 (CODING_GUIDELINES APP-001)"
+      },
+      {
+        "term": "CRUD",
+        "category": "데이터 설계",
+        "summary": "데이터를 다루는 4가지 기본 동작 — 생성·조회·수정·삭제",
+        "detail": "Create(생성), Read(조회), Update(수정), Delete(삭제)의 첫 글자예요. 사용자가 화면에서 버튼을 눌러 글을 쓰고·보고·고치고·지우는 모든 앱의 기본 동작이에요. 우리의 기존 데이터 수집(파이프라인)과는 성격이 완전히 달라요 — 수집은 외부에서 받아 통째로 교체(DELETE-INSERT)하지만, CRUD는 사용자가 한 건씩 직접 만들고 고쳐요.",
+        "example": "개발 트래커에서 티켓 등록(Create) → 목록 조회(Read) → 상태 수정(Update) → 취소(soft Delete)",
+        "projectContext": "개발 트래커는 프론트엔드 CRUD 모델. Supabase가 유일한 원본(외부 시스템 복제 아님)"
+      },
+      {
+        "term": "원본의 단일 진실 공급원 (Source of Truth)",
+        "category": "데이터 설계",
+        "summary": "어떤 데이터의 '진짜 정답'이 어디에 있는지를 명확히 정하는 원칙",
+        "detail": "같은 정보가 여러 곳에 있으면 어느 게 맞는지 혼란스러워요. 그래서 데이터마다 '여기가 진실의 원천'을 하나로 정해요. 외부에서 받아오는 데이터(품목, 거래처)는 ERP/WMS가 원본이고 Supabase는 복제본이에요. 반면 사용자가 직접 만드는 앱 데이터(개발 트래커 티켓)는 Supabase 자체가 원본이에요.",
+        "example": "품목 마스터 → ERP가 원본 / 개발 트래커 티켓 → Supabase가 원본",
+        "projectContext": "데이터 성격에 따라 원본 위치가 다름 → 갱신 전략(DELETE-INSERT vs CRUD)도 달라짐"
+      },
+      {
+        "term": "View (뷰)",
+        "category": "데이터베이스",
+        "summary": "여러 테이블을 조합해 만든 '가상의 표' — 조회할 때마다 실시간 계산",
+        "detail": "View는 실제 데이터를 저장하지 않고, 조회할 때마다 정의된 쿼리를 실행해 결과를 보여줘요. 여러 테이블을 미리 조인해둔 '저장된 질문'이라고 보면 돼요. Materialized View(MV)와 달리 항상 최신이지만, 매번 계산하므로 무거운 집계는 느려요. 단순 조인이나 항상 최신이 중요한 경우 View, 무거운 집계는 MV를 써요.",
+        "example": "v_nfa_latest_stock = 품고 시점재고를 항상 최신(MAX base_date)으로 보여주는 뷰",
+        "projectContext": "NFA 통합 뷰(v_nfa_dashboard), 메인센터 재고 뷰 등. 대시보드는 View/MV만 연결(스프레드시트 직접 연결 금지)"
+      },
+      {
+        "term": "DROP VIEW vs CREATE OR REPLACE",
+        "category": "데이터베이스",
+        "summary": "뷰의 컬럼 순서를 바꿀 땐 교체가 아니라 삭제 후 재생성해야 한다는 규칙",
+        "detail": "기존 뷰에 컬럼을 끼워넣거나 순서를 바꾸려고 CREATE OR REPLACE를 쓰면 PostgreSQL이 거부해요(ERROR 42P16). 컬럼 구성을 바꿀 때는 DROP VIEW IF EXISTS로 먼저 지운 뒤 새로 CREATE VIEW 해야 해요. 단순히 내용만 바꾸는 거면 CREATE OR REPLACE로 충분해요.",
+        "example": "컬럼 추가 시: DROP VIEW IF EXISTS poomgo.v_nfa_avg_diagnostic; CREATE VIEW ...",
+        "projectContext": "v_nfa_avg_diagnostic에 item_name 컬럼 추가 시 42P16 오류 → DROP 후 재생성으로 해결"
+      },
+      {
+        "term": "이동평균 (Moving Average)",
+        "category": "데이터 설계",
+        "summary": "최근 일정 기간의 평균을 계속 갱신하며 추세를 보는 계산법",
+        "detail": "매일의 출고량은 들쭉날쭉하니, 최근 N일 평균으로 부드럽게 만들어 '평소 어느 정도 나가는지'를 봐요. 단순 이동평균은 모든 날에 같은 가중치를, 가중 이동평균은 최근에 더 큰 가중치를 줘요. 우리는 가중평균이 프로모션 노이즈를 증폭시켜 과잉재고를 유발하는 걸 발견하고, 6주(42일) 단순 이동평균으로 바꿨어요.",
+        "example": "채널 평소요 = 최근 42일 출고 합계 ÷ 42 (고정 분모 단순 이동평균)",
+        "projectContext": "NFA 출고 대시보드의 채널 평소요. 가중평균→단순 6주 평균으로 전환(고정 분모)"
+      },
+      {
+        "term": "커버일수 (Cover Days)",
+        "category": "데이터 설계",
+        "summary": "현재 재고로 며칠을 버틸 수 있는지 나타내는 지표",
+        "detail": "'지금 재고 ÷ 하루 평균 출고량'으로 계산해요. 커버일수가 짧으면 곧 품절(소진임박), 길거나 무한대면 안 팔리고 쌓인 악성재고일 수 있어요. 발주를 '당겨야 할 품목'과 '빼야 할 품목'을 동시에 볼 수 있게 해줘요.",
+        "example": "품고재고 1,029 ÷ 채널평소요 57.5 = 17.9일 (약 18일 버팀)",
+        "projectContext": "NFA 대시보드 핵심 지표. 3주 이하=소진임박 경보, 출고 0인데 재고 있음=악성재고 후보"
+      },
+      {
+        "term": "고정 분모 vs 가변 분모",
+        "category": "데이터 설계",
+        "summary": "평균을 낼 때 나누는 '날 수'를 고정할지, 실제 출고일만 셀지의 선택",
+        "detail": "이동평균을 낼 때 분모(나누는 날 수)를 어떻게 잡느냐가 결과를 크게 바꿔요. 품고는 주말·휴일 없이 24시간 운영하니 달력상 모든 날(고정 42일)로 나눠야 정확해요. 출고가 있던 날만 세면(가변 분모) 가끔 팔리는 품목의 평균이 부풀려져 과대평가돼요.",
+        "example": "고정: 출고합 ÷ 42일 (정확) / 가변: 출고합 ÷ 실제출고일수 (느린 품목 과대평가)",
+        "projectContext": "품고는 연중무휴 운영 → 달력 기준 고정 분모가 정답. 기존 분모 70 고정이 과소추정 유발해 수정"
+      },
+      {
+        "term": "Storage Bucket (스토리지 버킷)",
+        "category": "데이터베이스",
+        "summary": "이미지·문서 같은 파일을 보관하는 Supabase의 파일 저장 공간",
+        "detail": "테이블은 텍스트·숫자 데이터를 저장하지만, 첨부파일(이미지, PDF 등)은 버킷이라는 별도 공간에 저장해요. DB 테이블에는 파일 자체가 아니라 '파일이 어디 있는지' 경로만 기록해요. 화면별로 버킷을 여러 개 만들기보다, 하나의 버킷 안에서 프로젝트별 하위폴더로 정리하는 게 관리하기 편해요.",
+        "example": "scm-app-files 버킷 → 프로젝트별 하위폴더로 첨부파일 정리",
+        "projectContext": "개발 트래커 첨부파일은 scm-app-files 단일 버킷 사용. 테이블에는 경로만 저장"
+      },
+      {
+        "term": "Data Contract (데이터 계약 문서)",
+        "category": "데이터 설계",
+        "summary": "프론트엔드와 DB가 주고받는 컬럼명·타입을 고정해두는 약속 문서",
+        "detail": "프론트엔드 동료(Owen)가 화면을 만들 때 DB 컬럼명을 참조하는데, 한쪽이 무심코 컬럼명을 바꾸면 화면이 깨져요. 이걸 막기 위해 '이 화면은 이 컬럼을 이 타입으로 쓴다'를 문서로 고정해둬요. 양쪽이 같은 약속을 보고 작업하니 정렬이 깨지지 않아요.",
+        "example": "NFA_대시보드_연동_레퍼런스 = 통합 뷰 컬럼 명세 + 조회 함수 + API Route 코드",
+        "projectContext": "B2C·NFA 대시보드마다 연동 레퍼런스 MD 작성. Owen이 Claude Code에 넣으면 바로 구현되도록"
+      },
+      {
+        "term": "기본 행 제한 함정 (Default Row Limit)",
+        "category": "데이터 설계",
+        "summary": "Supabase 클라이언트가 말없이 1,000행만 가져오는 함정",
+        "detail": "Supabase 클라이언트는 기본적으로 1,000행만 반환하고 나머지는 조용히 잘라버려요. 오류도 안 나서 '데이터가 사라졌다'고 착각하기 쉬워요. 실제로 동료의 대시보드에서 4/22 이후 데이터가 안 보인 게 이 문제였어요. 모든 조회에 .limit(100000)을 명시해야 안전해요.",
+        "example": "supabase.from('...').select('*').limit(100000)  ← 항상 명시",
+        "projectContext": "동료 대시보드 데이터 누락 사건의 진짜 원인. 모든 조회에 .limit(100000) 필수 (CODING_GUIDELINES DB-009)"
+      },
+      {
+        "term": "오케스트레이션 (Orchestration)",
+        "category": "자동화",
+        "summary": "여러 작업을 정해진 순서로 묶어서 실행하는 '지휘' 흐름",
+        "detail": "데이터 수집은 여러 단계(받기→변환→감지→저장)와 여러 출처(재고→출고→운송장)가 정해진 순서로 맞물려 돌아가야 해요. 이 순서를 짜고 지휘하는 게 오케스트레이션이에요. 오케스트라 지휘자가 악기들의 연주 순서를 맞추는 것과 같아요. config.py에 이 흐름이 출처별로 구성돼 있어요.",
+        "example": "출고(release) → 운송장(tnum) → 주문상세(details) 순서로 수집 (출고 먼저)",
+        "projectContext": "config.py의 4단계 함수를 출처별로 오케스트레이션. 새 데이터 연동 시 같은 패턴 복제"
+      }
+    ]
+  },
+  {
+    "week": "2026-W25",
+    "weekLabel": "6월 3주차 (6/15~6/21)",
+    "concepts": [
+      {
+        "term": "Flow 데이터 vs 잔액(Balance) 데이터",
+        "category": "데이터 설계",
+        "summary": "기간 중 '움직인 양'(flow)과 특정 시점의 '남은 양'(balance)을 구분하는 개념",
+        "detail": "재고 데이터에는 두 종류가 있어요. Flow는 입고·출고·조정처럼 '얼마나 들어오고 나갔는가'(움직임). Balance는 '지금 몇 개 남았는가'(잔액 스냅샷). NanSoft의 GetInventoryHistory는 flow 데이터(입고/출고/조정)는 정확히 주지만, 잔액(beginInventory/endInventory)은 0으로 와서 쓸 수 없었어요. 그래서 flow로부터 잔액을 직접 계산하는 방식으로 전환했어요.",
+        "example": "Flow: 입고 1,286 / 출고 29 / 반품 5 (정상) vs Balance: beginInventory=0, endInventory=0 (사용 불가)",
+        "projectContext": "nansoft_get_inventory_history는 flow 데이터만 신뢰. 잔액 스냅샷 필드(begin/endInventory)는 0이 나와 계산 방식으로 우회"
+      },
+      {
+        "term": "마감 재고 계산식 (Closing Inventory)",
+        "category": "데이터 설계",
+        "summary": "전일 잔액에 당일 움직임을 더하고 빼서 당일 마감 재고를 구하는 공식",
+        "detail": "잔액 데이터를 API로 못 받을 때, flow(움직임)로부터 직접 계산해요. '오늘 마감 = 어제 마감 + 입고 − 출고 − B2B출고 ± 조정'. 이렇게 하면 매일의 재고 잔액을 누적으로 만들어낼 수 있어요. 단, 시작점이 되는 기준 잔액(anchor)이 한 번은 필요해요.",
+        "example": "closing(D) = closing(D-1) + inbound − B2C출고 − B2B출고 ± adjustments",
+        "projectContext": "NanSoft 일별 마감 재고를 flow 데이터로 산출. ERP 마감 주기(익월 10일경)와 정렬 목표"
+      },
+      {
+        "term": "Anchor / Baseline (기준 잔액)",
+        "category": "데이터 설계",
+        "summary": "재고를 누적 계산할 때 출발점이 되는 '최초 기준 재고값'",
+        "detail": "마감 재고를 '어제 + 움직임'으로 계산하려면, 맨 처음 '어제 값'이 어딘가에서 한 번은 주어져야 해요. 이 출발점이 anchor(기준 잔액)예요. 출발점이 틀리면 이후 모든 누적값이 어긋나기 때문에, 어떤 값을 기준으로 삼을지가 중요한 설계 결정이에요.",
+        "example": "wms_stock_location 스냅샷 또는 WMS 화면 재고값을 anchor로 사용 → 이후 flow로 누적",
+        "projectContext": "마감 재고 계산의 3대 미해결 설계 질문 중 하나. 어떤 값을 baseline으로 잡을지 검토 중"
+      },
+      {
+        "term": "실재고 vs 가용재고",
+        "category": "데이터 설계",
+        "summary": "물리적으로 존재하는 재고(실재고)와 실제 판매 가능한 재고(가용재고)의 구분",
+        "detail": "창고에 100개가 있어도(실재고), 그중 20개가 이미 출고 대기 중이면 실제로 팔 수 있는 건 80개(가용재고)예요. 출고대기수량(deliveryWaitQuantity)을 빼느냐 마느냐에 따라 정의가 달라져요. 분석 목적에 따라 어느 쪽을 '재고'로 볼지 먼저 정해야 해요.",
+        "example": "실재고 100개 − 출고대기 20개 = 가용재고 80개",
+        "projectContext": "마감 재고 계산의 설계 질문 중 하나. deliveryWaitQuantity 처리 방식이 정의에 따라 달라짐"
+      },
+      {
+        "term": "창고별 vs 회사 전체 집계",
+        "category": "데이터 설계",
+        "summary": "재고를 창고 단위로 따로 볼지, 전사 합산으로 볼지의 집계 기준 선택",
+        "detail": "창고 간 이동(A창고→B창고)이 있을 때, 창고별로 보면 A는 감소·B는 증가로 잡히지만, 회사 전체로 보면 변동이 없어요. 그래서 집계 단위에 따라 창고 이동 수량(moveEnter/moveExport)을 어떻게 처리할지가 달라져요.",
+        "example": "창고이동 50개: 창고별 집계 → A창고 −50, B창고 +50 / 전사 집계 → 변동 0",
+        "projectContext": "마감 재고 계산의 설계 질문 중 하나. moveEnterQuantity/moveExportQuantity 처리가 집계 단위에 좌우됨"
+      },
+      {
+        "term": "크로스 시스템 조인 키 (Cross-system Join Key)",
+        "category": "데이터 설계",
+        "summary": "서로 다른 시스템(ERP↔WMS)의 데이터를 연결하는 공통 식별자",
+        "detail": "ERP와 WMS는 별개 시스템이라 같은 거래처를 다른 코드로 부를 수 있어요. 이 둘을 연결하려면 공통 키가 필요해요. ERP의 거래처 번호(CustSeq)에 규칙적인 접두어를 붙이면 WMS 코드가 돼요. 이 키 덕분에 ERP 매출과 WMS 출고를 같은 거래처로 묶어 분석할 수 있어요.",
+        "example": "ERP CustSeq=1234 → WMS 판매처 SL0001234, WMS 입고처 IP0001234",
+        "projectContext": "ERP 거래처(CustSeq)가 WMS 코드와 연결되는 핵심 조인 키. SL000=B2C판매, IP000=입고"
+      },
+      {
+        "term": "중첩 응답 구조 (DataBlock 패턴)",
+        "category": "API 문서 구조",
+        "summary": "영림원 ERP 응답이 DataBlock1/2/3/4로 여러 겹 나뉘는 고유 구조",
+        "detail": "영림원 ERP는 응답을 여러 DataBlock으로 나눠서 줘요. DataBlock3에 실제 데이터가, DataBlock2에 컬럼 설명이, DataBlock4에 추가 속성이 흩어져 담기기도 해요. API마다 구조가 달라서(어떤 건 DataBlock1만, 어떤 건 깊게 중첩), 코드 짜기 전에 실제 응답을 먼저 확인하는 게 필수예요.",
+        "example": "거래처 응답: DataBlock3(실제 거래처 행) + DataBlock2(컬럼 메타) + DataBlock4(추가 속성 매트릭스)",
+        "projectContext": "영림원 ERP API의 공통 패턴. 거래처는 DataBlock 중첩, 단가표는 DataBlock1만 — API별로 구조 검증 필요"
+      },
+      {
+        "term": "시점 이력 내장 테이블 (SDate/EDate)",
+        "category": "데이터 설계",
+        "summary": "데이터 자체에 유효 시작일·종료일이 들어있어 시점별 값을 추적할 수 있는 구조",
+        "detail": "단가표처럼 'A거래처는 1월~3월엔 1000원, 4월부터 1200원'처럼 시점별로 값이 다른 데이터가 있어요. 이런 데이터는 시작일(SDate)·종료일(EDate) 컬럼을 자체적으로 갖고 있어서, 매번 전체를 통째로 교체(DELETE-INSERT)해도 '특정 시점에 얼마였나'를 그대로 추적할 수 있어요. 그래서 changelog가 불필요해요.",
+        "example": "단가표 행: CustSeq=1234, price=1200, SDate='2026-04-01', EDate='9999-12-31'",
+        "projectContext": "ERP 거래처별 판매단가표(erp_cust_sl_price)는 SDate 시점 이력을 내장 → changelog 대신 DELETE-INSERT 적용"
+      },
+      {
+        "term": "Changelog vs DELETE-INSERT 선택 기준",
+        "category": "데이터 설계",
+        "summary": "마스터 데이터라도 시점 컬럼 유무에 따라 갱신 전략이 달라진다는 원칙",
+        "detail": "마스터 데이터는 보통 changelog로 변경 이력을 남겨요. 하지만 데이터 자체에 SDate/EDate 같은 시점 컬럼이 이미 있으면, 전체를 통째로 교체(DELETE-INSERT)해도 이력이 보존돼요. 이 경우 changelog는 과한 구조라 DELETE-INSERT가 더 적합해요. '행이 자주 바뀌는 순수 마스터'면 changelog, '시점 컬럼 내장'이면 DELETE-INSERT.",
+        "example": "거래처 정보(changelog) vs 거래처별 단가표(DELETE-INSERT, SDate 내장)",
+        "projectContext": "같은 ERP 데이터라도 성격에 따라 전략 분기. 단가표는 시점 컬럼이 있어 DELETE-INSERT 선택"
+      },
+      {
+        "term": "데이터 품질 이슈 (필드 스왑)",
+        "category": "데이터 설계",
+        "summary": "원본 데이터에서 두 컬럼 값이 서로 뒤바뀌어 들어오는 등의 품질 문제",
+        "detail": "API 원본에 productCode와 productName 값이 일부 행에서 서로 뒤바뀌어 오는 경우가 있어요. 이럴 때 수집 단계에서 억지로 고치기보다, 원본은 그대로 저장하고 분석할 때 신뢰할 수 있는 마스터 테이블과 조인해서 올바른 값을 가져오는 방식이 안전해요.",
+        "example": "일부 행에서 productCode↔productName 값 뒤바뀜 → 원본 보존 + erp_item_basic 조인으로 정확한 품명 확보",
+        "projectContext": "원본 데이터는 가공 없이 저장(raw 보존), 분석 시 erp_item_basic과 조인해 품질 보정"
+      },
+      {
+        "term": "검증용 대조 (Reconciliation)",
+        "category": "데이터 설계",
+        "summary": "여러 출처의 데이터를 맞대어 차이가 없는지 확인하는 작업",
+        "detail": "DB에 쌓은 데이터가 실제와 맞는지 검증하려면, 다른 출처(재고관리 파일, 출고 RAW, 입고 목록 등)와 대조해요. 차이(variance)가 나면 원인을 찾아요. 예를 들어 어떤 날 재고가 안 맞으면, 그날 대량 입고가 있었는지 확인해서 설명되는 차이인지 가려내요.",
+        "example": "전일 마감 − 당일 마감 = 출고량. RAW 출고와 비교 → 차이나면 입고 이벤트 확인",
+        "projectContext": "시점재고 검증에서 바코드 기준 대조. 4/17 26건 차이는 입고 이벤트로 전부 설명됨(실제 오차 0)"
+      },
+      {
+        "term": "바코드 단위 합산 (Barcode-level Aggregation)",
+        "category": "데이터 설계",
+        "summary": "같은 바코드가 여러 행(LOT별)으로 나뉜 경우 합쳐서 비교하는 방식",
+        "detail": "같은 상품(바코드)이라도 입고 시기(LOT)별로 행이 나뉘어 있을 수 있어요. 재고를 비교할 때는 이 여러 행을 바코드 단위로 먼저 합산한 뒤 대조해야 정확해요. 바코드는 파일 간 100% 일치하는 유일한 키라서 매칭 기준으로 가장 안전해요.",
+        "example": "바코드 A: LOT1 30개 + LOT2 20개 → 바코드 단위 합산 50개로 비교",
+        "projectContext": "시점재고 검증 시 바코드를 매칭 키로 사용. LOT별로 나뉜 재고는 바코드 단위로 합산 후 대조"
+      }
+    ]
+  },
+  {
+    "week": "2026-W24",
+    "weekLabel": "6월 2주차 (6/8~6/14)",
+    "concepts": [
+      {
+        "term": "Materialized View (MV, 구체화된 뷰)",
+        "category": "데이터베이스",
+        "summary": "복잡한 집계 결과를 미리 계산해서 저장해두는 '저장된 요약표'",
+        "detail": "일반 뷰(View)는 조회할 때마다 매번 계산하지만, MV는 결과를 미리 계산해서 실제 데이터로 저장해둬요. 대시보드에서 '일자별 출고 요약'처럼 무거운 집계를 매번 계산하면 느리니까, 하루에 한두 번만 계산해서 저장해두고 대시보드는 그 저장된 결과만 빠르게 읽는 방식이에요.",
+        "example": "mv_b2c_daily_summary = 매일 출고 건수·당일출고비율을 미리 계산해 저장 → 대시보드가 즉시 조회",
+        "projectContext": "nansoft 스키마에 3개(daily_summary, daily_company, daily_product), poomgo에 NFA 출고 MV 운영. 대시보드 패널이 이 MV들을 읽음"
+      },
+      {
+        "term": "REFRESH (MV 갱신)",
+        "category": "데이터베이스",
+        "summary": "Materialized View에 저장된 요약 데이터를 최신으로 다시 계산하는 작업",
+        "detail": "MV는 미리 계산해 저장한 값이라, 원본 데이터가 바뀌어도 자동으로 갱신되지 않아요. 그래서 새 데이터가 들어온 뒤 REFRESH를 실행해 요약표를 다시 계산해야 해요. 우리 프로젝트는 모든 데이터 수집이 끝난 뒤 자동으로 REFRESH가 돌도록 예약돼 있어요.",
+        "example": "REFRESH MATERIALIZED VIEW nansoft.mv_b2c_daily_summary;",
+        "projectContext": "daily_refresh_dashboard.yml이 KST 12:30/20:30(모든 수집 완료 후)에 MV들을 자동 갱신"
+      },
+      {
+        "term": "CONCURRENTLY (무중단 갱신)",
+        "category": "데이터베이스",
+        "summary": "MV를 갱신하는 동안에도 대시보드 조회가 멈추지 않게 하는 옵션",
+        "detail": "REFRESH를 그냥 실행하면 갱신 중 잠깐 조회가 막힐 수 있어요. CONCURRENTLY를 붙이면 갱신 중에도 기존 데이터를 계속 조회할 수 있어 대시보드가 멈추지 않아요. 단, 이 옵션을 쓰려면 MV에 고유 인덱스(Unique Index)가 미리 만들어져 있어야 해요.",
+        "example": "REFRESH MATERIALIZED VIEW CONCURRENTLY poomgo.mv_nfa_daily_outbound;",
+        "projectContext": "대시보드를 실시간으로 보는 팀원들이 갱신 중에도 끊김 없이 조회하도록 CONCURRENTLY 적용"
+      },
+      {
+        "term": "인덱스 (Index)",
+        "category": "데이터베이스",
+        "summary": "특정 컬럼을 빠르게 찾기 위한 '책 뒷부분 색인' 같은 보조 구조",
+        "detail": "책에서 특정 단어를 찾을 때 색인을 보면 빠르듯, DB도 인덱스가 있으면 해당 컬럼으로 검색·정렬할 때 훨씬 빨라요. 날짜로 자주 조회하는 컬럼에 인덱스를 걸면 날짜 범위 조회가 빨라져요. 또 CONCURRENTLY 갱신을 쓰려면 고유 인덱스가 필수예요.",
+        "example": "CREATE INDEX idx_base_date ON nansoft.mv_b2c_daily_summary (base_date);",
+        "projectContext": "MV들의 base_date에 인덱스를 걸어 날짜 범위 조회를 빠르게. CONCURRENTLY용 고유 인덱스도 별도 생성"
+      },
+      {
+        "term": "Changelog 패턴 (변경 이력 추적)",
+        "category": "데이터 설계",
+        "summary": "마스터 데이터가 언제·무엇이·어떻게 바뀌었는지 별도 테이블에 기록하는 방식",
+        "detail": "품목·거래처 같은 마스터 데이터는 '지금 상태'만 보면 과거에 무엇이 바뀌었는지 알 수 없어요. 그래서 메인 테이블에는 최신 상태만 두고, 변경분(새로 생김=NEW, 사라짐=DELETE, 값이 바뀜=UPDATE)을 changelog 테이블에 따로 쌓아요. '품목이 언제 단종됐는지' 같은 분석이 가능해져요.",
+        "example": "change_type=UPDATE, field_name='item_name', old_value='상품A', new_value='상품A 리뉴얼'",
+        "projectContext": "erp_item_basic_changelog(식별자 item_no), poomgo_wms_resources_changelog(식별자 resource_id) 운영. NEW/DELETE 행은 old/new_value가 NULL이 정상"
+      },
+      {
+        "term": "detect_changes (변경 감지)",
+        "category": "데이터 설계",
+        "summary": "기존 DB 데이터와 새로 받은 데이터를 비교해 바뀐 부분을 찾아내는 단계",
+        "detail": "changelog를 만들려면 '이전 상태'와 '새 상태'를 비교해야 해요. detect_changes가 이 비교를 담당해요 — 기존에 없던 건 NEW, 사라진 건 DELETE, 값이 달라진 건 UPDATE로 분류해요. 우리 수집 코드의 4단계(fetch→transform→detect_changes→save) 중 세 번째 단계예요.",
+        "example": "기존: {resource_id:123, name:'A'} / 신규: {resource_id:123, name:'B'} → UPDATE 감지",
+        "projectContext": "마스터 데이터(품목, 거래처) 수집 시 detect_changes로 변경분 추출 → changelog INSERT → 메인 테이블 DELETE-INSERT"
+      },
+      {
+        "term": "식별자 (Identifier / Key)",
+        "category": "데이터 설계",
+        "summary": "각 데이터 행을 유일하게 구분하는 '주민번호' 같은 고유값",
+        "detail": "변경을 추적하려면 '같은 품목인지'를 판단할 기준이 필요해요. 이 기준이 식별자예요. 중요한 원칙: 변하지 않고(immutable) 절대 안 겹치는(unique) 값을 골라야 해요. 바코드는 재사용·변경될 수 있어 위험하고, 마스터 고유 ID가 안전해요.",
+        "example": "품고 품목 식별자 = resource_id (마스터 고유 ID). 바코드(code)는 변경 가능성 때문에 식별자로 부적합",
+        "projectContext": "ERP 거래처는 CustSeq, 품고 품목은 resource_id, ERP 품목은 item_no를 식별자로 사용"
+      },
+      {
+        "term": "UTC → KST 변환",
+        "category": "데이터 설계",
+        "summary": "세계 표준시(UTC)로 저장된 시간을 한국 시간(KST)으로 9시간 더해 맞추는 작업",
+        "detail": "일부 API(품고 등)는 시간을 UTC(세계 표준시)로 줘요. 한국은 UTC보다 9시간 빠르기 때문에, UTC 시간에 9시간을 더해야 우리가 쓰는 한국 시간이 돼요. 이걸 안 맞추면 '오후 11시 데이터'가 '오후 2시'로 보이는 혼란이 생겨요.",
+        "example": "UTC 14:59:59 + 9시간 = KST 23:59:59 (같은 순간을 한국 시간으로 표현)",
+        "projectContext": "품고 timestamp 컬럼은 _kst 접미사를 붙여 변환 저장. KST 23:59:59 = UTC 14:59:59 기준 적용"
+      },
+      {
+        "term": "중첩 평탄화 (Nested Flatten)",
+        "category": "데이터 설계",
+        "summary": "객체 안에 객체가 든 중첩 구조를 펼쳐서 일반 컬럼으로 바꾸는 작업",
+        "detail": "품고 응답은 attribute.option1, setting.lot.name처럼 계층이 깊어요. 이걸 DB의 평평한 컬럼(option1, lot_name)으로 바꾸는 게 평탄화예요. 다만 중간 단계가 비어있을 수 있어서, 안전하게 꺼내는 헬퍼 함수로 처리해요(없으면 NULL 반환).",
+        "example": "attribute.option1 → option1 컬럼, setting.boxQuantity → box_quantity 컬럼",
+        "projectContext": "최상위 필드는 FIELD_MAPPING(1:1), 중첩 필드는 NESTED_MAPPING(경로 리스트)으로 분리 관리. _poomgo_nested_get() 헬퍼로 안전 접근"
+      },
+      {
+        "term": "raw JSON 검증",
+        "category": "데이터 설계",
+        "summary": "수집 코드를 짜기 전에 API 응답 원본을 그대로 출력해 문서와 대조하는 단계",
+        "detail": "API 문서가 실제 응답을 100% 반영하지 못하는 경우가 많아요. 그래서 코드를 짜기 전에 먼저 1페이지를 호출해 원본 JSON을 통째로 출력하고, 문서에 없는 필드가 있는지 눈으로 확인해요. 의미 있어 보이는 필드는 일단 수집해두는 게 안전해요 — 나중엔 과거 데이터를 못 받을 수 있거든요.",
+        "example": "품고 품목 응답에서 문서에 없던 type('GOODS'), disabled(boolean) 필드 발견 → 컬럼 추가",
+        "projectContext": "신규 API 연동 시 적재 코드 작성 전 raw JSON 검증을 필수 단계로 수행 (CODING_GUIDELINES DATA-004)"
+      },
+      {
+        "term": "Connection Pooler (연결 풀러)",
+        "category": "연결·인증",
+        "summary": "DB 접속을 효율적으로 나눠 쓰게 해주는 '접속 중개소'",
+        "detail": "여러 프로그램이 동시에 DB에 접속하면 부담이 커요. Pooler는 접속을 모아서 효율적으로 분배해줘요. Supabase의 Shared Pooler를 쓸 때는 사용자명에 프로젝트 ID를 붙이는 특별한 형식이 필요해요. 이걸 모르면 접속이 실패해요.",
+        "example": "사용자명: postgres.tqbhmgbtjantmdfgrjxf (postgres + 프로젝트 ID), 포트: 6543",
+        "projectContext": "GitHub Actions에서 Supabase 접속 시 Shared Pooler 사용. 비밀번호 특수문자 문제로 URI 대신 개별 파라미터 + psycopg2-binary 사용"
+      },
+      {
+        "term": "statement_timeout (구문 제한시간)",
+        "category": "연결·인증",
+        "summary": "하나의 SQL 명령이 실행될 수 있는 최대 시간 제한",
+        "detail": "무거운 작업(대량 MV 갱신 등)이 너무 오래 걸리면 DB가 중간에 강제로 끊어요. 기본 제한시간이 짧으면 정상 작업도 실패할 수 있어서, MV 갱신처럼 시간이 걸리는 작업 전에는 제한시간을 넉넉하게 늘려줘요.",
+        "example": "SET statement_timeout = 300000;  (300,000밀리초 = 5분)",
+        "projectContext": "REST API로 MV 갱신 시 타임아웃 오류 발생 → statement_timeout을 5분으로 설정해 해결"
+      },
+      {
+        "term": "cron (크론 / 예약 실행 표현식)",
+        "category": "자동화",
+        "summary": "'언제 실행할지'를 분·시·일·월·요일 5칸으로 표현하는 예약 방식",
+        "detail": "GitHub Actions가 매일 정해진 시각에 코드를 돌리려면 cron 표현식으로 시각을 적어요. 주의할 점: GitHub Actions의 cron은 UTC(세계 표준시) 기준이라, 한국 시간으로 원하는 시각에서 9시간을 빼서 적어야 해요.",
+        "example": "cron: '30 3,11 * * *' → UTC 03:30, 11:30 = KST 12:30, 20:30",
+        "projectContext": "daily_refresh_dashboard.yml이 KST 12:30/20:30에 실행되도록 cron을 UTC 03:30/11:30으로 설정"
+      },
+      {
+        "term": "workflow_dispatch (수동 실행)",
+        "category": "자동화",
+        "summary": "예약 시각을 기다리지 않고 버튼으로 즉시 워크플로를 실행하는 기능",
+        "detail": "cron으로 예약해두면 정해진 시각에만 돌아요. 하지만 테스트하거나 급히 데이터를 갱신해야 할 때는 기다릴 수 없죠. workflow_dispatch를 넣어두면 GitHub Actions 화면에서 'Run workflow' 버튼으로 즉시 실행할 수 있어요.",
+        "example": "yml에 on: workflow_dispatch 추가 → Actions 탭에서 수동 실행 버튼 생성",
+        "projectContext": "수집/갱신 워크플로를 푸시 직후 바로 검증할 때 수동 실행으로 활용"
+      },
+      {
+        "term": "4단계 수집 패턴 (fetch→transform→detect→save)",
+        "category": "데이터 설계",
+        "summary": "모든 데이터 수집 코드가 따르는 4단계 표준 흐름",
+        "detail": "수집 코드를 일관된 구조로 만들기 위한 우리 프로젝트의 표준이에요. ① fetch: API에서 원본 데이터를 받아옴 ② transform: 컬럼명·타입을 DB에 맞게 변환(camelCase→snake_case 등) ③ detect_changes: 마스터 데이터면 변경분 감지 ④ save: DB에 저장(거래 데이터는 DELETE-INSERT, 마스터는 changelog+갱신).",
+        "example": "fetch_poomgo_items() → transform_items() → detect_item_changes() → save_to_supabase()",
+        "projectContext": "config.py에 이 4단계 함수를 출처별로 구성. 새 데이터 연동 시 같은 패턴을 복제해 일관성 유지"
+      }
+    ]
+  },
+  {
+    "week": "2026-W23",
+    "weekLabel": "6월 1주차 (6/1~6/7)",
+    "concepts": [
+      {
+        "term": "데이터 타입 (Data Type)",
+        "category": "데이터베이스",
+        "summary": "컬럼에 어떤 종류의 값을 저장할 수 있는지 정하는 규칙",
+        "detail": "엑셀에서 셀 서식을 '텍스트', '숫자', '날짜'로 지정하는 것과 같아요. 데이터 타입을 지정하면 잘못된 값이 들어오는 것을 방지할 수 있어요. 예를 들어 숫자 컬럼에 '안녕하세요'라는 텍스트가 들어오면 DB가 거부해요.",
+        "example": "quantity 컬럼 → INTEGER (숫자만 허용), order_id 컬럼 → TEXT (문자 허용)",
+        "projectContext": "Supabase에서 테이블 생성 시 각 컬럼마다 데이터 타입을 반드시 지정해야 함"
+      },
+      {
+        "term": "TEXT (텍스트)",
+        "category": "데이터 타입",
+        "summary": "글자, 문자열을 저장하는 타입 — 길이 제한 없음",
+        "detail": "이름, 주소, 상품명, 주문번호 등 문자로 이루어진 모든 값을 저장해요. 길이 제한이 없어서 한 줄짜리 코드부터 긴 메모까지 다 넣을 수 있어요. 숫자처럼 보여도 계산이 필요 없는 값(주문번호, 우편번호 등)은 TEXT로 저장하는 게 맞아요.",
+        "example": "order_id = 'ORD-20240115-001', warehouse_code = 'B2C-WH'",
+        "projectContext": "주문번호, 창고코드, 회사코드(SL000XXXX), 상품명, 운송장번호 등 대부분의 식별 값에 사용"
+      },
+      {
+        "term": "INTEGER (정수)",
+        "category": "데이터 타입",
+        "summary": "소수점 없는 정수(1, 2, 100 등)를 저장하는 타입",
+        "detail": "수량, 개수처럼 딱 떨어지는 숫자를 저장해요. 소수점이 필요 없는 숫자에 사용해요. 저장 범위는 약 -21억 ~ +21억이에요.",
+        "example": "quantity = 5, stock_count = 1200",
+        "projectContext": "출고 수량(quantity), 재고 수량 등 개수를 나타내는 컬럼에 사용"
+      },
+      {
+        "term": "BIGINT (큰 정수)",
+        "category": "데이터 타입",
+        "summary": "INTEGER보다 훨씬 큰 범위의 정수를 저장하는 타입",
+        "detail": "INTEGER의 약 21억 한계를 넘는 큰 숫자가 필요할 때 사용해요. 약 -922경 ~ +922경까지 저장 가능해요. 누적 금액이나 대규모 일련번호 등에 쓰여요.",
+        "example": "total_revenue = 5000000000 (50억)",
+        "projectContext": "금액 합계가 21억을 넘을 수 있는 매출 관련 컬럼에 사용 가능"
+      },
+      {
+        "term": "NUMERIC / DECIMAL (소수점 숫자)",
+        "category": "데이터 타입",
+        "summary": "소수점이 있는 정밀한 숫자를 저장하는 타입",
+        "detail": "가격, 무게, 비율처럼 소수점이 필요한 값에 사용해요. NUMERIC(10,2)처럼 쓰면 '전체 10자리, 소수점 이하 2자리'를 의미해요. 금액 계산에서 반올림 오차 없이 정확한 값을 유지해줘요.",
+        "example": "price = 12500.50, weight_kg = 3.75",
+        "projectContext": "단가, 금액, 무게 등 소수점이 포함되는 컬럼에 적합"
+      },
+      {
+        "term": "BOOLEAN (불리언)",
+        "category": "데이터 타입",
+        "summary": "TRUE(참) 또는 FALSE(거짓), 딱 두 가지 값만 가지는 타입",
+        "detail": "엑셀에서 특정 열에 O/X만 적는 것과 같아요. '이 상품이 활성 상태인가?', '출고가 완료되었는가?'처럼 예/아니오로 구분되는 항목에 사용해요.",
+        "example": "is_active = TRUE (활성), is_shipped = FALSE (미출고)",
+        "projectContext": "Poomgo 스키마 테이블 설계 시 활성 여부, 완료 여부 등의 상태 플래그에 사용"
+      },
+      {
+        "term": "DATE (날짜)",
+        "category": "데이터 타입",
+        "summary": "날짜만 저장하는 타입 (시간 정보 없음)",
+        "detail": "연-월-일까지만 기록하고, 몇 시 몇 분인지는 저장하지 않아요. 주문일, 출고일처럼 '며칠'만 중요한 경우에 사용해요.",
+        "example": "release_date = '2024-01-15'",
+        "projectContext": "b2c_order_release의 release_date(전산차감일), wms_date(배정일), order_date(주문일)"
+      },
+      {
+        "term": "TIMESTAMP (타임스탬프)",
+        "category": "데이터 타입",
+        "summary": "날짜 + 시간을 함께 저장하는 타입 (시간대 정보 없음)",
+        "detail": "'2024-01-15 14:30:00'처럼 날짜와 시간을 모두 기록해요. 다만 시간대 정보가 없어서, 이 시간이 한국 시간인지 미국 시간인지는 별도로 관리해야 해요.",
+        "example": "created_at = '2024-01-15 14:30:00'",
+        "projectContext": "시간대 구분이 필요 없는 단순 기록용 시간에 사용 가능"
+      },
+      {
+        "term": "TIMESTAMPTZ (타임스탬프 + 시간대)",
+        "category": "데이터 타입",
+        "summary": "날짜 + 시간 + 시간대(KST, UTC 등)까지 저장하는 타입",
+        "detail": "TIMESTAMP와 비슷하지만, 시간대 정보(+09:00 등)가 포함돼요. 한국 시간(KST)인지, 세계 표준시(UTC)인지를 DB가 자동으로 관리해줘요. 여러 시간대를 다룰 때 혼동을 방지해요.",
+        "example": "fetched_at = '2024-01-15T14:30:00+09:00' (KST)",
+        "projectContext": "데이터 수집 시각(fetched_at) 등에 사용. .replace(microsecond=0).isoformat() 형식으로 저장"
+      },
+      {
+        "term": "JSONB (제이슨 바이너리)",
+        "category": "데이터 타입",
+        "summary": "JSON 형태의 중첩된 데이터를 통째로 한 컬럼에 저장하는 타입",
+        "detail": "일반 컬럼이 하나의 값을 저장하는 것과 달리, JSONB는 중첩된 구조(객체 안에 객체, 배열 안에 객체)를 통째로 넣을 수 있어요. Poomgo API처럼 응답이 중첩 구조일 때 특히 유용해요 — receiverData 안의 name/address, items 배열, invoices 배열 등을 각각 컬럼으로 풀지 않고 원본 그대로 보관할 수 있어요. DB 안에서 JSON 내부 필드를 검색하거나 꺼내 쓸 수도 있어요.",
+        "example": "receiver_data = {\"name\": \"김지민\", \"address\": \"서울시 마포구...\"}, items = [{\"resourceId\": 3194, \"quantity\": 1}]",
+        "projectContext": "Poomgo 스키마에서 중첩 구조(receiverData, items, invoices 등)를 저장할 때 활용. Nansoft EMP는 응답이 납작한(flat) 구조라 JSONB 없이 일반 컬럼으로 충분했지만, Poomgo는 중첩이 깊어서 JSONB가 실용적"
+      },
+      {
+        "term": "VARCHAR(n) (가변 문자열)",
+        "category": "데이터 타입",
+        "summary": "최대 글자 수를 제한할 수 있는 텍스트 타입",
+        "detail": "TEXT와 비슷하지만, VARCHAR(50)처럼 최대 길이를 지정할 수 있어요. 50자를 초과하는 값이 들어오면 DB가 거부해요. 다만 Supabase(PostgreSQL)에서는 TEXT와 성능 차이가 거의 없어서, 길이 제한이 꼭 필요한 경우가 아니면 TEXT를 쓰는 것이 일반적이에요.",
+        "example": "VARCHAR(10) → 최대 10글자, 예: 'B2C-WH' (6자, OK) / 'B2C-WAREHOUSE-001' (17자, 거부)",
+        "projectContext": "Supabase에서는 TEXT를 기본으로 사용하되, 입력값 길이를 엄격히 제한할 필요가 있을 때만 VARCHAR 사용"
+      },
+      {
+        "term": "Flat 구조 vs Nested 구조",
+        "category": "API 문서 구조",
+        "summary": "API 응답 데이터가 한 레벨로 펼쳐져 있는지(flat), 객체 안에 객체가 들어있는지(nested)",
+        "detail": "Flat(납작한) 구조는 모든 필드가 같은 레벨에 나열돼요. Nested(중첩) 구조는 객체 안에 객체, 배열 안에 객체가 들어가요. Flat은 DB 테이블로 변환하기 쉽고, Nested는 JSONB로 저장하거나 풀어서(flatten) 변환해야 해요.",
+        "example": "Flat: {\"receiverName\": \"김지민\", \"address\": \"서울...\"} / Nested: {\"receiverData\": {\"name\": \"김지민\", \"address\": \"서울...\"}}",
+        "projectContext": "Nansoft EMP = Flat 구조 → 컬럼 매핑만으로 충분. Poomgo = Nested 구조 → receiverData, items, invoices 등 중첩 객체를 풀거나 JSONB로 저장하는 설계 판단 필요"
+      },
+      {
+        "term": "페이지네이션 (Pagination)",
+        "category": "API 문서 구조",
+        "summary": "대량 데이터를 한 번에 주지 않고 페이지 단위로 나눠서 전달하는 방식",
+        "detail": "검색 결과가 10,000건이면 한 번에 다 보내지 않고, 50건씩 나눠서 200페이지로 전달해요. page(현재 페이지), limit/pageSize(페이지당 건수), total(전체 건수)로 구성돼요. 전체 데이터를 수집하려면 total을 확인하고 페이지를 반복 호출하는 루프가 필요해요.",
+        "example": "total: 150, page: 1, limit: 50 → 3페이지를 반복 호출해야 전체 데이터 수집 가능",
+        "projectContext": "Poomgo API는 페이지네이션 방식(page, pageSize, total). Nansoft EMP는 페이지네이션 없이 전체를 한 번에 반환 → 코드 설계가 근본적으로 달라짐"
+      },
+      {
+        "term": "Poomgo API 특징 요약",
+        "category": "API 문서 구조",
+        "summary": "품고 Open API의 인증, 응답 구조, 날짜 형식 등 핵심 특성 정리",
+        "detail": "인증은 Authorization 헤더에 API Key 전달(5분 캐싱). HTTP 메서드가 GET/POST/PUT/PATCH/DELETE로 다양하고, 날짜는 ISO 8601 형식(2024-01-15T00:00:00). 날짜 필터는 $gte/$lte 연산자 방식. 응답은 rows 배열 + total/page/limit 페이지네이션 구조. Boolean 필드(isPrinted, isClosed, isCanceled)와 문자열 상태코드(cargoStatusCodeKey)가 다수 포함.",
+        "example": "Base URL: https://api.poomgo.com/open-api/ / 날짜 필터: {\"createdAt\": {\"$gte\": \"2024-01-01T00:00:00\"}} / 상태: isClosed=true",
+        "projectContext": "poomgo 스키마로 분리 저장. Nansoft와 달리 Boolean 타입 컬럼 필요, 페이지네이션 루프 필요, 중첩 구조 처리 필요 — 코드 패턴이 기존 nansoft 수집 스크립트와 상당히 다름"
+      },
+      {
+        "term": "Nansoft EMP vs Poomgo 비교",
+        "category": "API 문서 구조",
+        "summary": "두 WMS API의 인증·응답·날짜 형식 등 핵심 차이점 대조표",
+        "detail": "인증: EMP는 ApiKey 헤더, Poomgo는 Authorization 헤더. HTTP: EMP는 전부 POST, Poomgo는 메서드 혼용. 날짜: EMP는 YYYYMMDD 문자열, Poomgo는 ISO 8601. 응답: EMP는 전체 데이터 한 번에 반환(flat), Poomgo는 페이지네이션+중첩 구조. 결과 코드: EMP는 resultCode('00'/'90'), Poomgo는 HTTP 상태코드. 데이터 타입: EMP는 string/integer 위주, Poomgo는 boolean/nested object 추가 사용.",
+        "example": "EMP: {\"resultCode\":\"00\", \"orderReleaseDetailResults\":[...]} vs Poomgo: {\"total\":\"150\", \"page\":1, \"rows\":[{\"invoices\":[...]}]}",
+        "projectContext": "같은 Supabase에 저장하지만 스키마(nansoft vs poomgo)와 수집 코드 패턴이 완전히 다름. config.py 통합 관리가 아닌 별도 수집 스크립트 필요 가능성 높음"
+      }
+    ]
+  },
+  {
     "week": "2026-W22",
     "weekLabel": "5월 4주차 (5/25~5/31)",
     "concepts": [
